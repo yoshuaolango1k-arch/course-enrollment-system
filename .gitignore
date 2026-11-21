@@ -1,0 +1,22 @@
+
+# Environment secrets
+.env
+.env.*
+
+# Allow the example configuration
+!.env.example
+
+# Dependencies
+/vendor/
+
+# Logs
+*.log
+
+# Storage files
+/storage/*
+!/storage/.gitkeep
+
+# Operating system files
+.DS_Store
+Thumbs.db
+

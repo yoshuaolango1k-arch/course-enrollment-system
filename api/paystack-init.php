@@ -1,0 +1,6 @@
+<?php
+require __DIR__.'/../config/bootstrap.php';require_role('student');
+$pid=(int)($_GET['payment']??0);$s=$pdo->prepare("SELECT * FROM payments WHERE id=? AND user_id=? AND provider='paystack' AND status='pending'");$s->execute([$pid,current_user()['id']]);$p=$s->fetch();if(!$p)exit('Payment not found.');
+$key=envv('PAYSTACK_SECRET_KEY');if(!$key||str_contains($key,'REPLACE'))exit('Add your Paystack test secret key to .env first.');
+$payload=['email'=>current_user()['email'],'amount'=>$p['amount_kes']*100,'reference'=>$p['reference'],'callback_url'=>BASE_URL.'/api/paystack-callback.php'];
+$ch=curl_init('https://api.paystack.co/transaction/initialize');curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_RETURNTRANSFER=>true,CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$key,'Content-Type: application/json'],CURLOPT_POSTFIELDS=>json_encode($payload)]);$raw=curl_exec($ch);$code=curl_getinfo($ch,CURLINFO_HTTP_CODE);curl_close($ch);$data=json_decode((string)$raw,true);if($code>=200&&$code<300&&!empty($data['data']['authorization_url'])){header('Location: '.$data['data']['authorization_url']);exit;}http_response_code(502);exit('Could not initialize Paystack checkout. Check sandbox credentials and try again.');

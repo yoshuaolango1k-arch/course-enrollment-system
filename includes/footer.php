@@ -1,0 +1,1 @@
+</main><footer class="bg-slate-900 text-slate-300 text-center text-sm py-5">© <?= date('Y') ?> <?= e(APP_NAME) ?> · Student Course Enrollment Project</footer><script src="<?= BASE_URL ?>/assets/js/app.js"></script></body></html>

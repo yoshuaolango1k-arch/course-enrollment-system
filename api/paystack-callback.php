@@ -1,0 +1,11 @@
+<?php
+require __DIR__.'/../config/bootstrap.php';
+$ref=trim($_GET['reference']??'');if($ref==='')exit('Missing payment reference.');
+$s=$pdo->prepare("SELECT * FROM payments WHERE reference=? AND provider='paystack'");$s->execute([$ref]);$p=$s->fetch();if(!$p)exit('Payment reference not found.');
+$key=envv('PAYSTACK_SECRET_KEY');if(!$key||str_contains($key,'REPLACE'))exit('Paystack is not configured.');
+$ch=curl_init('https://api.paystack.co/transaction/verify/'.rawurlencode($ref));curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_HTTPHEADER=>['Authorization: Bearer '.$key]]);$raw=curl_exec($ch);$code=curl_getinfo($ch,CURLINFO_HTTP_CODE);curl_close($ch);$data=json_decode((string)$raw,true);
+if($code<200||$code>=300||empty($data['data']))exit('Payment verification failed. Contact the administrator if you were charged.');
+$d=$data['data'];$userQ=$pdo->prepare('SELECT email FROM users WHERE id=?');$userQ->execute([$p['user_id']]);$expectedEmail=strtolower((string)$userQ->fetchColumn());
+$success=($d['status']??'')==='success' && (int)($d['amount']??0)===(int)$p['amount_kes']*100 && ($d['reference']??'')===$ref && ($d['currency']??'')==='KES' && strtolower((string)($d['customer']['email']??''))===$expectedEmail;
+$pdo->beginTransaction();try{$lock=$pdo->prepare('SELECT * FROM payments WHERE id=? FOR UPDATE');$lock->execute([$p['id']]);$current=$lock->fetch();if($current['status']!=='success' && $current['status']!=='failed'){$status=$success?'success':'failed';$up=$pdo->prepare('UPDATE payments SET status=?,provider_reference=?,provider_payload=?,verified_at=IF(?="success",NOW(),verified_at) WHERE id=?');$up->execute([$status,(string)($d['id']??''),json_encode($data),$status,$p['id']]);if($success){$en=$pdo->prepare("INSERT INTO enrollments(user_id,course_id,payment_id,status) VALUES(?,?,?,'active') ON DUPLICATE KEY UPDATE status='active',payment_id=VALUES(payment_id)");$en->execute([$p['user_id'],$p['course_id'],$p['id']]);}}$pdo->commit();}catch(Throwable $e){$pdo->rollBack();throw $e;}
+flash($success?'Payment verified. Your course is now available.':'Payment was not successful. You can try again.',$success?'info':'error');redirect('student/dashboard.php');
